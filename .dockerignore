@@ -1,0 +1,7 @@
+node_modules
+BackEnd/node_modules
+frontend/node_modules
+BackEnd/.env
+frontend/.env
+frontend/dist
+.git
