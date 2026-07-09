@@ -18,13 +18,6 @@ const User = sequelize.define("User", {
   senha: {
     type: DataTypes.STRING,
     allowNull: false
-  },
-
-  // Custo fixo por contrato operado (R$), usado no cálculo do líquido
-  custo_operacao: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    defaultValue: 1.5
   }
 
 }, {

@@ -1,10 +1,10 @@
 const sequelize = require("../config/db");
 
 const User = require("./User");
-const Trade = require("./Trade");
+const DailyResult = require("./DailyResult");
 
-// Trade pertence a um User (dono da operação)
-Trade.belongsTo(User, { foreignKey: "user_id", as: "user" });
-User.hasMany(Trade,   { foreignKey: "user_id", as: "trades" });
+// DailyResult pertence a um User (dono do fechamento)
+DailyResult.belongsTo(User, { foreignKey: "user_id", as: "user" });
+User.hasMany(DailyResult, { foreignKey: "user_id", as: "dailyResults" });
 
-module.exports = { sequelize, User, Trade };
+module.exports = { sequelize, User, DailyResult };

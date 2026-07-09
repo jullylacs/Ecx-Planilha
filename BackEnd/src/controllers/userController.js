@@ -95,21 +95,13 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// 🔹 Atualiza dados do próprio perfil (nome e/ou custo por operação)
+// 🔹 Atualiza dados do próprio perfil (nome)
 exports.updateMe = async (req, res) => {
   try {
-    const { nome, custo_operacao } = req.body;
+    const { nome } = req.body;
     const updateData = {};
 
     if (nome !== undefined) updateData.nome = xss(nome);
-
-    if (custo_operacao !== undefined) {
-      const parsed = Number(custo_operacao);
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        return res.status(400).json({ message: "Custo por operação inválido" });
-      }
-      updateData.custo_operacao = parsed;
-    }
 
     await User.update(updateData, { where: { id: req.userId } });
 
