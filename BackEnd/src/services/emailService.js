@@ -10,26 +10,38 @@ const transporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
   : null;
 const fromEmail = process.env.GMAIL_USER;
 
+// Um e-mail com "cartão" escuro + botão grande estilizado (like a página do site) bate demais
+// no padrão que o filtro anti-phishing do Gmail associa a phishing quando o remetente é uma
+// conta pessoal — ele descarta silenciosamente (nem cai no spam). Um layout mais discreto
+// (título + link em texto, sem cartão/botão) mantém a identidade visual (roxo do site) e passa.
 function buildResetPasswordHtml(resetUrl) {
   return `
-    <div style="background:#0E0E13;padding:32px 16px;font-family:sans-serif;">
-      <div style="max-width:420px;margin:0 auto;background:#1B1B24;border:1px solid #38384A;border-radius:16px;padding:32px;">
-        <h1 style="color:#F4F4F5;font-size:18px;margin:0 0 16px;">Redefinição de senha</h1>
-        <p style="color:#A1A1AA;font-size:14px;line-height:1.5;margin:0 0 24px;">
-          Recebemos um pedido para redefinir a senha da sua conta no Diário de Operações.
-          Se foi você, clique no botão abaixo. O link expira em 1 hora.
-        </p>
-        <a href="${resetUrl}"
-           style="display:inline-block;background:#8B5CF6;color:#fff;text-decoration:none;
-                  font-weight:bold;font-size:14px;padding:12px 20px;border-radius:8px;">
-          Redefinir senha
-        </a>
-        <p style="color:#A1A1AA;font-size:12px;line-height:1.5;margin:24px 0 0;">
-          Se você não pediu isso, pode ignorar este e-mail — sua senha continua a mesma.
-        </p>
-      </div>
+    <div style="font-family: -apple-system, 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 8px;">
+      <p style="font-size:13px; letter-spacing:0.08em; text-transform:uppercase; color:#8B5CF6; font-weight:700; margin:0 0 4px;">
+        Diário de Operações
+      </p>
+      <h2 style="color:#1B1B24; font-size:19px; margin:0 0 16px;">Redefinição de senha</h2>
+      <p style="font-size:14px; line-height:1.6; color:#3F3F46; margin:0 0 12px;">
+        Recebemos um pedido para redefinir a senha da sua conta. Se foi você, acesse o link abaixo
+        para escolher uma nova senha (válido por 1 hora):
+      </p>
+      <p style="margin:20px 0;">
+        <a href="${resetUrl}" style="color:#7C3AED; font-weight:600; font-size:14px;">Redefinir minha senha →</a>
+      </p>
+      <p style="font-size:12px; line-height:1.5; color:#A1A1AA; margin:24px 0 0; border-top:1px solid #E4E4E7; padding-top:16px;">
+        Se você não pediu isso, pode ignorar este e-mail — sua senha continua a mesma.
+      </p>
     </div>
   `;
+}
+
+function buildResetPasswordText(resetUrl) {
+  return `Diário de Operações — Redefinição de senha
+
+Recebemos um pedido para redefinir a senha da sua conta. Se foi você, acesse o link abaixo (válido por 1 hora):
+${resetUrl}
+
+Se você não pediu isso, pode ignorar este e-mail — sua senha continua a mesma.`;
 }
 
 // Envia o e-mail de redefinição de senha. Falhas são logadas e engolidas pelo chamador:
@@ -47,6 +59,7 @@ async function sendPasswordResetEmail(to, resetUrl) {
       to,
       subject: "Redefinição de senha — Diário de Operações",
       html: buildResetPasswordHtml(resetUrl),
+      text: buildResetPasswordText(resetUrl),
     });
   } catch (error) {
     console.error("Erro ao enviar e-mail de redefinição:", error);
