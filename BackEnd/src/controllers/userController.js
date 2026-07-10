@@ -7,6 +7,10 @@ const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
+// Hash "morto" (sem usuário correspondente) usado para igualar o tempo de resposta do login
+// quando o e-mail não existe — evita que a diferença de tempo revele se a conta existe.
+const DUMMY_HASH = bcrypt.hashSync("timing-attack-guard", 12);
+
 const issueToken = (user) => {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET não configurado");
@@ -28,8 +32,8 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: "Nome, email e senha são obrigatórios" });
     }
 
-    if (senha.length < 6) {
-      return res.status(400).json({ message: "Senha deve ter no mínimo 6 caracteres" });
+    if (senha.length < 8) {
+      return res.status(400).json({ message: "Senha deve ter no mínimo 8 caracteres" });
     }
 
     if (!isValidEmail(email)) {
@@ -66,12 +70,11 @@ exports.login = async (req, res) => {
     }
 
     const user = await User.findOne({ where: { email: String(email).toLowerCase() } });
-    if (!user) {
-      return res.status(401).json({ message: "Credenciais inválidas" });
-    }
 
-    const isPasswordValid = await bcrypt.compare(senha, user.senha);
-    if (!isPasswordValid) {
+    // Sempre roda bcrypt.compare (com um hash morto quando o usuário não existe) para que o
+    // tempo de resposta não denuncie se o e-mail está cadastrado.
+    const isPasswordValid = await bcrypt.compare(senha, user ? user.senha : DUMMY_HASH);
+    if (!user || !isPasswordValid) {
       return res.status(401).json({ message: "Credenciais inválidas" });
     }
 

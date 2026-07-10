@@ -50,7 +50,7 @@ export default function Register() {
     >
       <AuthInput icon={User} placeholder="Nome" type="text" value={nome} onChange={(e) => setNome(e.target.value)} onKeyDown={handleKeyPress} />
       <AuthInput icon={Mail} placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={handleKeyPress} />
-      <AuthInput icon={Lock} placeholder="Senha (mín. 6 caracteres)" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={handleKeyPress} />
+      <AuthInput icon={Lock} placeholder="Senha (mín. 8 caracteres)" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={handleKeyPress} />
       <AuthButton onClick={register} loading={loading}>
         {loading ? "Criando..." : "Criar conta"}
       </AuthButton>

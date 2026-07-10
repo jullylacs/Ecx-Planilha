@@ -9,6 +9,13 @@ const app = express();
 const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || "1mb";
 const apiBasePath = process.env.API_BASE_PATH || "/api/v1";
 
+// Atrás do proxy da Railway (produção), confia no primeiro hop para que req.ip reflita o IP
+// real do cliente via X-Forwarded-For — sem isso o rate limiter via todos os usuários como um
+// único IP (o do proxy), fazendo tráfego abusivo de uma pessoa bloquear todo mundo.
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 function normalizeOrigin(origin) {
   return String(origin || "").trim().replace(/\/$/, "").toLowerCase();
 }

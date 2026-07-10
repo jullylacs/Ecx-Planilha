@@ -27,4 +27,11 @@ const loginLimiter = rateLimit({
   message: "Muitas tentativas de login"
 });
 
-module.exports = { globalLimiter, loginLimiter };
+// Rate limiting para criação de contas — evita cadastro automatizado em massa
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: "Muitas tentativas de cadastro, tente novamente mais tarde"
+});
+
+module.exports = { globalLimiter, loginLimiter, registerLimiter };
