@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
 const { globalLimiter } = require("./middleware/rateLimiter");
 const { sequelize } = require("./models");
 
@@ -58,6 +59,7 @@ app.use(helmet());
 app.use(cors(corsOptions));
 app.use(globalLimiter);
 app.use(express.json({ limit: requestBodyLimit }));
+app.use(cookieParser());
 
 const userRoutes = require("./routes/userRoutes");
 const dailyResultRoutes = require("./routes/dailyResultRoutes");

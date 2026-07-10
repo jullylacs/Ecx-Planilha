@@ -1,17 +1,16 @@
 const jwt = require("jsonwebtoken");
 
 // Middleware de autenticação JWT
-// Valida o token Bearer enviado no header Authorization e injeta req.userId e req.user
+// Lê o token do cookie httpOnly (definido no login/registro) e, como alternativa, do header
+// Authorization: Bearer — útil para chamadas de API diretas (ex: scripts, testes).
 module.exports = (req, res, next) => {
   const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+  const token = req.cookies?.token || bearerToken;
 
-  if (!authHeader) {
+  if (!token) {
     return res.status(401).json({ message: "Token não fornecido" });
   }
-
-  const token = authHeader.startsWith("Bearer ")
-    ? authHeader.substring(7)
-    : authHeader;
 
   const secret = process.env.JWT_SECRET;
   if (!secret) {

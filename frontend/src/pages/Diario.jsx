@@ -184,8 +184,12 @@ export default function Diario() {
     })();
   }, []);
 
-  const logout = () => {
-    localStorage.removeItem("token");
+  const logout = async () => {
+    try {
+      await api.post("/users/logout");
+    } catch {
+      // mesmo se a chamada falhar, ainda limpa o estado local e manda pro login
+    }
     localStorage.removeItem("user");
     navigate("/login");
   };

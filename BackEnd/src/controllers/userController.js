@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const xss = require("xss");
 
-const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -11,10 +11,35 @@ const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 // quando o e-mail não existe — evita que a diferença de tempo revele se a conta existe.
 const DUMMY_HASH = bcrypt.hashSync("timing-attack-guard", 12);
 
+// Converte strings tipo "24h", "7d", "30m" (mesmo formato aceito pelo JWT_EXPIRES_IN) para
+// milissegundos, para usar como maxAge do cookie de sessão.
+function parseDurationMs(value, fallbackMs) {
+  const match = /^(\d+)\s*(ms|s|m|h|d)?$/i.exec(String(value ?? "").trim());
+  if (!match) return fallbackMs;
+  const amount = Number(match[1]);
+  const unitMs = { ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000 }[(match[2] || "ms").toLowerCase()];
+  return amount * unitMs;
+}
+
+const COOKIE_MAX_AGE = parseDurationMs(TOKEN_EXPIRES_IN, 24 * 60 * 60 * 1000);
+const COOKIE_NAME = "token";
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  path: "/",
+};
+
 const issueToken = (user) => {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET não configurado");
   return jwt.sign({ id: user.id, email: user.email }, secret, { expiresIn: TOKEN_EXPIRES_IN });
+};
+
+// Envia o JWT como cookie httpOnly (não acessível via JavaScript no navegador) em vez de no
+// corpo da resposta — mitiga roubo de token via XSS, já que o token nunca chega ao localStorage.
+const sendAuthCookie = (res, token) => {
+  res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: COOKIE_MAX_AGE });
 };
 
 const publicUser = (user) => {
@@ -40,12 +65,16 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: "Email inválido" });
     }
 
+    // Gera o hash antes de checar duplicidade: o custo do bcrypt domina o tempo da requisição,
+    // então a resposta demora praticamente o mesmo tempo esteja o e-mail livre ou já cadastrado
+    // (dificulta enumerar e-mails cadastrados só observando o tempo de resposta).
+    const senhaHash = await bcrypt.hash(senha, 12);
+
     const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
     if (existingUser) {
       return res.status(409).json({ message: "Email já cadastrado" });
     }
 
-    const senhaHash = await bcrypt.hash(senha, 12);
     const user = await User.create({
       nome: xss(nome),
       email: email.toLowerCase(),
@@ -53,7 +82,8 @@ exports.register = async (req, res) => {
     });
 
     const token = issueToken(user);
-    res.status(201).json({ user: publicUser(user), token });
+    sendAuthCookie(res, token);
+    res.status(201).json({ user: publicUser(user) });
   } catch (err) {
     console.error("Erro no registro:", err);
     res.status(500).json({ message: "Erro ao registrar" });
@@ -79,11 +109,18 @@ exports.login = async (req, res) => {
     }
 
     const token = issueToken(user);
-    res.json({ user: publicUser(user), token });
+    sendAuthCookie(res, token);
+    res.json({ user: publicUser(user) });
   } catch (err) {
     console.error("Erro no login:", err);
     res.status(500).json({ message: "Erro no servidor" });
   }
+};
+
+// 🔹 Encerra a sessão limpando o cookie do token
+exports.logout = (req, res) => {
+  res.clearCookie(COOKIE_NAME, cookieOptions);
+  res.status(204).send();
 };
 
 // 🔹 Retorna o perfil do usuário autenticado

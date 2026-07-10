@@ -4,8 +4,12 @@ import Register from "./pages/Register";
 import Diario from "./pages/Diario";
 
 function PrivateRoute({ children }) {
-  const token = localStorage.getItem("token");
-  if (!token) return <Navigate to="/login" replace />;
+  // A sessão real é validada pelo backend via cookie httpOnly em cada request; isto aqui é só
+  // uma checagem de UX para não piscar a página protegida antes de redirecionar. Se o cookie
+  // estiver ausente/expirado, a primeira chamada à API retorna 401 e o interceptor do axios
+  // já força o redirecionamento para /login.
+  const hasUser = Boolean(localStorage.getItem("user"));
+  if (!hasUser) return <Navigate to="/login" replace />;
   return children;
 }
 

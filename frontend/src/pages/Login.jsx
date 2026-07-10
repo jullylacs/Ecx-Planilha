@@ -19,7 +19,8 @@ export default function Login() {
       setLoading(true);
       setErrorMessage("");
       const res = await api.post("/users/login", { email, senha });
-      localStorage.setItem("token", res.data.token);
+      // A sessão vive num cookie httpOnly (definido pelo backend); aqui só guardamos os dados
+      // do usuário para exibição na UI (nome no topo), nunca o token.
       localStorage.setItem("user", JSON.stringify(res.data.user));
       navigate("/");
     } catch (error) {

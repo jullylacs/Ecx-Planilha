@@ -11,30 +11,20 @@ const apiBaseUrl = explicitBaseUrl
   : normalizedBasePath;
 
 // Instância do Axios com baseURL apontando para o backend
+// withCredentials: o token de sessão vai num cookie httpOnly (não em localStorage), então o
+// navegador precisa ser instruído a enviar/aceitar esse cookie em toda requisição.
 const api = axios.create({
   baseURL: apiBaseUrl,
   timeout: 10000,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
-// Injeta o token JWT em toda requisição autenticada
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Em caso de token inválido/expirado, força novo login
+// Em caso de sessão inválida/expirada, força novo login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
       localStorage.removeItem("user");
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";

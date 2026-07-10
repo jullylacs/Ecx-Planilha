@@ -151,7 +151,7 @@ Crie uma conta em `/register`, faça login e comece a lançar seus fechamentos d
 | `DATABASE_URL` | — | Usada automaticamente em produção (ex: Railway) |
 | `PORT` | `3001` | Porta do servidor |
 | `JWT_SECRET` | — | Chave de assinatura dos tokens — **obrigatória, use um valor forte** |
-| `JWT_EXPIRES_IN` | `7d` | Validade do token |
+| `JWT_EXPIRES_IN` | `24h` | Validade do token / cookie de sessão |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens permitidas (não usado em produção, já que é mesma origem) |
 
 ### `frontend/.env`
@@ -161,12 +161,15 @@ Crie uma conta em `/register`, faça login e comece a lançar seus fechamentos d
 
 ## API
 
-Prefixo: `/api/v1`. Rotas de `daily-results` exigem `Authorization: Bearer <token>`.
+Prefixo: `/api/v1`. A sessão é um JWT em cookie `httpOnly` (setado no login/registro); rotas de
+`daily-results` e `/users/me` exigem esse cookie (ou, como alternativa para chamadas diretas de
+API, um header `Authorization: Bearer <token>`).
 
 | Método | Rota | Descrição |
 |---|---|---|
-| POST | `/users/register` | Cria conta, retorna `{ user, token }` |
-| POST | `/users/login` | Autentica, retorna `{ user, token }` |
+| POST | `/users/register` | Cria conta, retorna `{ user }` e seta o cookie de sessão |
+| POST | `/users/login` | Autentica, retorna `{ user }` e seta o cookie de sessão |
+| POST | `/users/logout` | Limpa o cookie de sessão |
 | GET | `/users/me` | Perfil do usuário autenticado |
 | PUT | `/users/me` | Atualiza o nome do usuário |
 | GET | `/daily-results` | Lista os fechamentos diários do usuário |
