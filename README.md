@@ -31,30 +31,31 @@ tudo persistido em banco, com login próprio para cada usuário.
 
 ## Visão geral
 
-Cada operação lançada (data, ativo, compra/venda, contratos, entrada, saída) é convertida
-automaticamente em pontos, resultado bruto, custo por contrato e resultado líquido, com base
-no valor do ponto de cada ativo (WIN = R$0,20/pt, WDO = R$10,00/pt) e num custo por operação
-configurável por usuário. A partir disso o painel monta:
+Cada fechamento diário lançado (data + resultado em pontos do mini índice) é convertido
+automaticamente em resultado financeiro, com base no valor do ponto do WIN (R$0,20/pt).
+A partir desses lançamentos diários o painel monta:
 
 - Curva de capital acumulada
-- Resultado semanal e mensal (barra + linha de acumulado)
-- Distribuição de operações vencedoras x perdedoras
+- Resultado semanal, mensal e anual (barra + linha de acumulado)
+- Distribuição de dias positivos x negativos
 - Ganho x perda total
-- Cartões de resumo: dia, semana, mês, taxa de acerto, fator de lucro
+- Cartões de resumo: pontos e resultado do dia, semana, mês, ano, assertividade, dias
+  positivos/negativos, fator de lucro
 
-Cada usuário só vê e edita suas próprias operações. O layout segue a paleta cinza-escuro,
+Cada usuário só vê e edita seus próprios fechamentos. O layout segue a paleta cinza-escuro,
 roxo e branco definida no protótipo original do projeto.
 
 ## Funcionalidades
 
 - 🔐 Cadastro e login com JWT — cada conta é isolada
-- ✍️ Tabela de operações editável em linha, com salvamento automático (cria/atualiza/remove
-  no banco conforme você edita, sem botão de "salvar")
-- ⚙️ Custo por operação (R$/contrato) configurável e persistido por usuário
-- 🔄 Botão **Exemplo** — popula o diário com 7 operações de demonstração
-- 🗑️ Botão **Limpar** — remove todas as suas operações de uma vez
-- 📊 6 gráficos (Recharts): curva de capital, semanal, mensal, pizza de acerto, pizza de
-  ganho/perda
+- ✍️ Tabela de fechamentos diários editável em linha (data + pontos), com salvamento
+  automático (cria/atualiza/remove no banco conforme você edita, sem botão de "salvar") — só
+  um fechamento por data
+- 🧮 Resultado financeiro calculado automaticamente a partir dos pontos (mini índice, R$0,20/pt)
+- 🔄 Botão **Exemplo** — popula o diário com 12 fechamentos de demonstração
+- 🗑️ Botão **Limpar** — remove todos os seus fechamentos de uma vez
+- 📊 5 gráficos (Recharts): curva de capital, semanal, mensal, pizza de dias positivos x
+  negativos, pizza de ganho/perda
 
 ## Stack
 
@@ -90,11 +91,11 @@ Ecx-Planilha/
 │  └─ src/
 │     ├─ app.js                # Express app: middlewares, rotas, static em produção
 │     ├─ config/db.js          # instância Sequelize (suporta DATABASE_URL ou vars soltas)
-│     ├─ controllers/          # userController, tradeController, middleware/auth
+│     ├─ controllers/          # userController, dailyResultController, middleware/auth
 │     ├─ database/             # config do sequelize-cli + migrations
 │     ├─ middleware/           # rate limiter
-│     ├─ models/                # User, Trade
-│     └─ routes/                # userRoutes, tradeRoutes
+│     ├─ models/                # User, DailyResult
+│     └─ routes/                # userRoutes, dailyResultRoutes
 └─ frontend/
    └─ src/
       ├─ pages/                 # Login, Register, Diario (o painel principal)
@@ -138,8 +139,8 @@ npm run dev
 Backend em `http://localhost:3001`, frontend em `http://localhost:5173` (com proxy de
 `/api` para o backend — não precisa configurar CORS para dev local).
 
-Crie uma conta em `/register`, faça login e comece a lançar operações. **Exemplo** carrega
-dados de demonstração; **Limpar** apaga todas as suas operações.
+Crie uma conta em `/register`, faça login e comece a lançar seus fechamentos diários.
+**Exemplo** carrega dados de demonstração; **Limpar** apaga todos os seus fechamentos.
 
 ## Variáveis de ambiente
 
@@ -160,20 +161,20 @@ dados de demonstração; **Limpar** apaga todas as suas operações.
 
 ## API
 
-Prefixo: `/api/v1`. Rotas de `trades` exigem `Authorization: Bearer <token>`.
+Prefixo: `/api/v1`. Rotas de `daily-results` exigem `Authorization: Bearer <token>`.
 
 | Método | Rota | Descrição |
 |---|---|---|
 | POST | `/users/register` | Cria conta, retorna `{ user, token }` |
 | POST | `/users/login` | Autentica, retorna `{ user, token }` |
 | GET | `/users/me` | Perfil do usuário autenticado |
-| PUT | `/users/me` | Atualiza nome e/ou custo por operação |
-| GET | `/trades` | Lista as operações do usuário |
-| POST | `/trades` | Cria uma operação |
-| PUT | `/trades/:id` | Atualiza uma operação |
-| DELETE | `/trades/:id` | Remove uma operação |
-| POST | `/trades/seed` | Substitui as operações pelo conjunto de exemplo |
-| DELETE | `/trades` | Remove todas as operações do usuário |
+| PUT | `/users/me` | Atualiza o nome do usuário |
+| GET | `/daily-results` | Lista os fechamentos diários do usuário |
+| POST | `/daily-results` | Cria um fechamento diário (409 se a data já tiver um) |
+| PUT | `/daily-results/:id` | Atualiza um fechamento |
+| DELETE | `/daily-results/:id` | Remove um fechamento |
+| POST | `/daily-results/seed` | Substitui os fechamentos pelo conjunto de exemplo |
+| DELETE | `/daily-results` | Remove todos os fechamentos do usuário |
 | GET | `/health/db` | Healthcheck da conexão com o banco |
 
 ## Deploy

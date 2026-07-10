@@ -47,7 +47,7 @@ app.use(globalLimiter);
 app.use(express.json({ limit: requestBodyLimit }));
 
 const userRoutes = require("./routes/userRoutes");
-const tradeRoutes = require("./routes/tradeRoutes");
+const dailyResultRoutes = require("./routes/dailyResultRoutes");
 
 app.get(`${apiBasePath}/`, (req, res) => {
   res.send("API Diário de Operações rodando 🚀");
@@ -63,7 +63,7 @@ app.get(`${apiBasePath}/health/db`, async (req, res) => {
 });
 
 app.use(`${apiBasePath}/users`, userRoutes);
-app.use(`${apiBasePath}/trades`, tradeRoutes);
+app.use(`${apiBasePath}/daily-results`, dailyResultRoutes);
 
 // 🔹 Em produção, o próprio backend serve o build estático do frontend
 // (mesma origem — evita precisar de CORS ou de um serviço separado)
