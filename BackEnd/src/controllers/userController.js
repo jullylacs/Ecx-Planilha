@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const xss = require("xss");
 
-const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
+const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 

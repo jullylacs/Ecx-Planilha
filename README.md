@@ -151,7 +151,7 @@ Crie uma conta em `/register`, faça login e comece a lançar seus fechamentos d
 | `DATABASE_URL` | — | Usada automaticamente em produção (ex: Railway) |
 | `PORT` | `3001` | Porta do servidor |
 | `JWT_SECRET` | — | Chave de assinatura dos tokens — **obrigatória, use um valor forte** |
-| `JWT_EXPIRES_IN` | `24h` | Validade do token / cookie de sessão |
+| `JWT_EXPIRES_IN` | `7d` | Validade do token / cookie de sessão |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens permitidas (não usado em produção, já que é mesma origem) |
 
 ### `frontend/.env`

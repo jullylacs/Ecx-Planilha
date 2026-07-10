@@ -8,7 +8,7 @@ import {
   Plus, Trash2, RotateCcw, Activity, LogOut, Sparkles, Loader2,
   Target, Wallet, Calendar, CalendarDays, CalendarRange, Percent,
   TrendingUp, TrendingDown, Gauge, ListChecks, LineChart as LineChartIcon,
-  BarChart3, PieChart as PieChartIcon, CircleDollarSign, AlertTriangle,
+  BarChart3, PieChart as PieChartIcon, CircleDollarSign, AlertTriangle, Layers,
 } from "lucide-react";
 import api from "../services/api";
 import { C } from "../theme";
@@ -312,6 +312,7 @@ export default function Diario() {
   const monthT = latest ? withAccum.filter((r) => sameMonth(r.dateObj, latest)) : [];
   const yearT = latest ? withAccum.filter((r) => sameYear(r.dateObj, latest)) : [];
 
+  const pontosTotal = withAccum.reduce((s, r) => s + r.pontos, 0);
   const pontosDia = dayT.reduce((s, r) => s + r.pontos, 0);
   const resultDia = dayT.reduce((s, r) => s + r.financeiro, 0);
   const resultSemana = weekT.reduce((s, r) => s + r.financeiro, 0);
@@ -445,6 +446,7 @@ export default function Diario() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-4">
+          <Card label="Pontos acumulado (total)" value={fmtPontos(pontosTotal)} color={pontosTotal >= 0 ? C.verde : C.vermelho} icon={Layers} accent={C.roxoMed} />
           <Card label="Pontos do dia" value={fmtPontos(pontosDia)} color={pontosDia >= 0 ? C.verde : C.vermelho} icon={Target} accent={pontosDia >= 0 ? C.verde : C.vermelho} />
           <Card label="Resultado do dia" value={fmt(resultDia)} color={resultDia >= 0 ? C.verde : C.vermelho} icon={Wallet} accent={resultDia >= 0 ? C.verde : C.vermelho} />
           <Card label="Resultado da semana" value={fmt(resultSemana)} color={resultSemana >= 0 ? C.verde : C.vermelho} icon={Calendar} accent={resultSemana >= 0 ? C.verde : C.vermelho} />
