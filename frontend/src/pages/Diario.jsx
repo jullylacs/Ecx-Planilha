@@ -287,6 +287,18 @@ export default function Diario() {
     [results, calcById]
   );
 
+  // Linhas com pontos preenchidos, independente do financeiro estar preenchido ou não — as
+  // métricas de pontos (Pontos do dia / Pontos acumulado) não podem depender do financeiro,
+  // senão um dia com só os pontos lançados (ex: um dia negativo ainda sem o R$ preenchido) some
+  // da contagem de pontos também.
+  const pontosRows = useMemo(
+    () => results
+      .filter((r) => isReadyRow(r))
+      .map((r) => ({ ...r, pontos: parseFloat(r.pontos), dateObj: new Date(r.data + "T00:00:00") }))
+      .sort((a, b) => a.dateObj - b.dateObj),
+    [results]
+  );
+
   // Tabela mostra os mais recentes no topo; linhas em branco (sem data ainda) ficam no topo também.
   const tableRows = useMemo(
     () => [...results].sort((a, b) => (!a.data ? -1 : !b.data ? 1 : b.data.localeCompare(a.data))),
@@ -312,8 +324,13 @@ export default function Diario() {
   const monthT = latest ? withAccum.filter((r) => sameMonth(r.dateObj, latest)) : [];
   const yearT = latest ? withAccum.filter((r) => sameYear(r.dateObj, latest)) : [];
 
-  const pontosTotal = withAccum.reduce((s, r) => s + r.pontos, 0);
-  const pontosDia = dayT.reduce((s, r) => s + r.pontos, 0);
+  // Referência de "hoje" própria para pontos — pode ser uma data mais recente que a última
+  // linha completa (com financeiro), se essa linha só tiver os pontos preenchidos.
+  const pontosLatest = pontosRows.length ? pontosRows[pontosRows.length - 1].dateObj : null;
+  const pontosDayT = pontosLatest ? pontosRows.filter((r) => sameDay(r.dateObj, pontosLatest)) : [];
+
+  const pontosTotal = pontosRows.reduce((s, r) => s + r.pontos, 0);
+  const pontosDia = pontosDayT.reduce((s, r) => s + r.pontos, 0);
   const resultDia = dayT.reduce((s, r) => s + r.financeiro, 0);
   const resultSemana = weekT.reduce((s, r) => s + r.financeiro, 0);
   const resultMes = monthT.reduce((s, r) => s + r.financeiro, 0);
