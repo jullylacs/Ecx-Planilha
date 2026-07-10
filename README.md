@@ -153,6 +153,8 @@ Crie uma conta em `/register`, faça login e comece a lançar seus fechamentos d
 | `JWT_SECRET` | — | Chave de assinatura dos tokens — **obrigatória, use um valor forte** |
 | `JWT_EXPIRES_IN` | `7d` | Validade do token / cookie de sessão |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens permitidas (não usado em produção, já que é mesma origem) |
+| `RESEND_API_KEY` | — | Chave de API do [Resend](https://resend.com/api-keys), usada para enviar o e-mail de redefinição de senha. Sem ela, o link só aparece no log do servidor (modo dev) |
+| `RESEND_FROM_EMAIL` | `onboarding@resend.dev` | Remetente do e-mail — o padrão de teste do Resend só entrega para o e-mail da própria conta; verifique um domínio em resend.com/domains para enviar a qualquer destinatário |
 
 ### `frontend/.env`
 | Variável | Padrão | Descrição |
@@ -170,6 +172,8 @@ API, um header `Authorization: Bearer <token>`).
 | POST | `/users/register` | Cria conta, retorna `{ user }` e seta o cookie de sessão |
 | POST | `/users/login` | Autentica, retorna `{ user }` e seta o cookie de sessão |
 | POST | `/users/logout` | Limpa o cookie de sessão |
+| POST | `/users/forgot-password` | Envia (por e-mail) um link de redefinição de senha, se o e-mail existir — sempre responde com a mesma mensagem genérica |
+| POST | `/users/reset-password` | Troca a senha usando o token recebido por e-mail (válido por 1h, uso único) |
 | GET | `/users/me` | Perfil do usuário autenticado |
 | PUT | `/users/me` | Atualiza o nome do usuário |
 | GET | `/daily-results` | Lista os fechamentos diários do usuário |

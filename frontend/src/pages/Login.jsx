@@ -50,6 +50,11 @@ export default function Login() {
     >
       <AuthInput icon={Mail} placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={handleKeyPress} />
       <AuthInput icon={Lock} placeholder="Senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={handleKeyPress} />
+      <div style={{ textAlign: "right", marginTop: -8, marginBottom: 16 }}>
+        <Link to="/forgot-password" style={{ color: C.cinza, fontSize: 12, textDecoration: "none" }}>
+          Esqueceu a senha?
+        </Link>
+      </div>
       <AuthButton onClick={login} loading={loading}>
         {loading ? "Entrando..." : "Entrar"}
       </AuthButton>

@@ -1,7 +1,10 @@
+const crypto = require("crypto");
+const { Op } = require("sequelize");
 const { User } = require("../models");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const xss = require("xss");
+const { sendPasswordResetEmail } = require("../services/emailService");
 
 const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
@@ -22,6 +25,8 @@ function parseDurationMs(value, fallbackMs) {
 }
 
 const COOKIE_MAX_AGE = parseDurationMs(TOKEN_EXPIRES_IN, 24 * 60 * 60 * 1000);
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // link de redefinição válido por 1h
+const hashToken = (rawToken) => crypto.createHash("sha256").update(rawToken).digest("hex");
 const COOKIE_NAME = "token";
 const cookieOptions = {
   httpOnly: true,
@@ -45,6 +50,8 @@ const sendAuthCookie = (res, token) => {
 const publicUser = (user) => {
   const raw = user.toJSON ? user.toJSON() : { ...user };
   delete raw.senha;
+  delete raw.resetPasswordTokenHash;
+  delete raw.resetPasswordExpires;
   return raw;
 };
 
@@ -150,5 +157,78 @@ exports.updateMe = async (req, res) => {
   } catch (err) {
     console.error("Erro ao atualizar perfil:", err);
     res.status(500).json({ message: "Erro ao atualizar perfil" });
+  }
+};
+
+// 🔹 Solicita redefinição de senha: gera um token, salva o hash dele e manda o link por e-mail.
+// Sempre responde com a mesma mensagem genérica, sem esperar o envio do e-mail terminar — nem
+// o corpo da resposta nem o tempo dela revelam se aquele e-mail está cadastrado.
+const GENERIC_FORGOT_PASSWORD_MESSAGE = "Se o e-mail estiver cadastrado, enviamos um link de redefinição.";
+
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body || {};
+  res.status(200).json({ message: GENERIC_FORGOT_PASSWORD_MESSAGE });
+
+  if (!email || !isValidEmail(String(email))) return;
+
+  try {
+    const user = await User.findOne({ where: { email: String(email).toLowerCase() } });
+    if (!user) return;
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    await user.update({
+      resetPasswordTokenHash: hashToken(rawToken),
+      resetPasswordExpires: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+    });
+
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+    const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`;
+
+    if (process.env.NODE_ENV !== "production") {
+      // Conveniência de desenvolvimento: sem RESEND_API_KEY configurado (ou pra não gastar
+      // cota de e-mail testando), o link também aparece no log local. Nunca roda em produção.
+      console.log(`[dev] link de redefinição de senha: ${resetUrl}`);
+    }
+
+    await sendPasswordResetEmail(user.email, resetUrl);
+  } catch (err) {
+    console.error("Erro ao processar esqueci minha senha:", err);
+  }
+};
+
+// 🔹 Confirma a redefinição: valida o token (por hash + prazo) e troca a senha
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, senha } = req.body || {};
+
+    if (!token || !senha) {
+      return res.status(400).json({ message: "Token e nova senha são obrigatórios" });
+    }
+    if (senha.length < 8) {
+      return res.status(400).json({ message: "Senha deve ter no mínimo 8 caracteres" });
+    }
+
+    const user = await User.findOne({
+      where: {
+        resetPasswordTokenHash: hashToken(String(token)),
+        resetPasswordExpires: { [Op.gt]: new Date() },
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Link de redefinição inválido ou expirado" });
+    }
+
+    const senhaHash = await bcrypt.hash(senha, 12);
+    await user.update({
+      senha: senhaHash,
+      resetPasswordTokenHash: null,
+      resetPasswordExpires: null,
+    });
+
+    res.status(200).json({ message: "Senha redefinida com sucesso" });
+  } catch (err) {
+    console.error("Erro ao redefinir senha:", err);
+    res.status(500).json({ message: "Erro ao redefinir senha" });
   }
 };

@@ -34,4 +34,19 @@ const registerLimiter = rateLimit({
   message: "Muitas tentativas de cadastro, tente novamente mais tarde"
 });
 
-module.exports = { globalLimiter, loginLimiter, registerLimiter };
+// Rate limiting para "esqueci minha senha" — evita spam de e-mail pra terceiros
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: "Muitas solicitações de redefinição, tente novamente mais tarde"
+});
+
+// Rate limiting para confirmar a redefinição (o token já é a proteção principal, isto é
+// só uma camada extra contra tentativas automatizadas)
+const resetPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: "Muitas tentativas, tente novamente mais tarde"
+});
+
+module.exports = { globalLimiter, loginLimiter, registerLimiter, forgotPasswordLimiter, resetPasswordLimiter };
