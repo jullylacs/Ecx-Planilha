@@ -1,7 +1,14 @@
-const { Resend } = require("resend");
+const nodemailer = require("nodemailer");
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+// Envia via SMTP do Gmail — não exige verificar domínio (diferente de serviços tipo Resend),
+// só uma conta Gmail com verificação em 2 etapas e uma "senha de app" (myaccount.google.com/apppasswords).
+const transporter = process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
+  ? nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
+    })
+  : null;
+const fromEmail = process.env.GMAIL_USER;
 
 function buildResetPasswordHtml(resetUrl) {
   return `
@@ -29,19 +36,19 @@ function buildResetPasswordHtml(resetUrl) {
 // o endpoint de forgot-password sempre responde com a mesma mensagem genérica, esteja o
 // e-mail configurado corretamente ou não, para não vazar detalhes de infraestrutura.
 async function sendPasswordResetEmail(to, resetUrl) {
-  if (!resend) {
-    console.error("RESEND_API_KEY não configurado — e-mail de redefinição não enviado");
+  if (!transporter) {
+    console.error("GMAIL_USER/GMAIL_APP_PASSWORD não configurados — e-mail de redefinição não enviado");
     return;
   }
 
-  const { error } = await resend.emails.send({
-    from: fromEmail,
-    to,
-    subject: "Redefinição de senha — Diário de Operações",
-    html: buildResetPasswordHtml(resetUrl),
-  });
-
-  if (error) {
+  try {
+    await transporter.sendMail({
+      from: `Diário de Operações <${fromEmail}>`,
+      to,
+      subject: "Redefinição de senha — Diário de Operações",
+      html: buildResetPasswordHtml(resetUrl),
+    });
+  } catch (error) {
     console.error("Erro ao enviar e-mail de redefinição:", error);
   }
 }
