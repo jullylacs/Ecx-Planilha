@@ -45,8 +45,6 @@ const buildPayload = (body, userId) => ({
   user_id: userId,
 });
 
-const isUniqueConstraintError = (err) => err?.name === "SequelizeUniqueConstraintError";
-
 // 🔹 Lista todos os fechamentos diários do usuário autenticado
 exports.getAll = async (req, res) => {
   try {
@@ -70,9 +68,6 @@ exports.create = async (req, res) => {
     const result = await DailyResult.create(buildPayload(req.body, req.userId));
     res.status(201).json(result);
   } catch (err) {
-    if (isUniqueConstraintError(err)) {
-      return res.status(409).json({ message: "Já existe um fechamento para esta data" });
-    }
     console.error("Erro ao criar fechamento:", err);
     res.status(500).json({ message: "Erro ao criar fechamento" });
   }
@@ -90,9 +85,6 @@ exports.update = async (req, res) => {
     await result.update(buildPayload(req.body, req.userId));
     res.json(result);
   } catch (err) {
-    if (isUniqueConstraintError(err)) {
-      return res.status(409).json({ message: "Já existe um fechamento para esta data" });
-    }
     console.error("Erro ao atualizar fechamento:", err);
     res.status(500).json({ message: "Erro ao atualizar fechamento" });
   }
