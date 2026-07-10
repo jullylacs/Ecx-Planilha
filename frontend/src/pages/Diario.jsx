@@ -18,13 +18,15 @@ const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "O
 const tempId = () => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const isTempId = (id) => typeof id === "string" && id.startsWith("temp-");
 
+// Arredonda antes de decidir o sinal — soma de vários valores em ponto flutuante pode fechar
+// em algo tipo -0.0000000003 em vez de 0 exato, o que sem isso vira "-R$ 0,00" na tela.
 const fmt = (v) => {
-  const n = Number(v) || 0;
+  const n = Math.round((Number(v) || 0) * 100) / 100;
   const sign = n < 0 ? "-" : "";
   return sign + "R$ " + Math.abs(n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 const fmtPontos = (v) => {
-  const n = Number(v) || 0;
+  const n = Math.round((Number(v) || 0) * 10) / 10;
   return (n >= 0 ? "+" : "") + n.toFixed(1);
 };
 const fmtDate = (iso) => {
@@ -32,12 +34,18 @@ const fmtDate = (iso) => {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}`;
 };
-const weekNum = (d) => {
+// Retorna o número da semana ISO 8601 junto com o "ano da semana" (isoYear) — que pode ser
+// diferente do ano-calendário perto da virada do ano (ex: 29/dez pode já ser semana 1 do ano
+// seguinte). Comparar semanas só pelo número + getFullYear() faz um dia da mesma semana ISO
+// sumir de "resultado da semana" ou entrar na semana errada do gráfico quando isso acontece.
+const isoWeek = (d) => {
   const date = new Date(d.getTime());
   date.setHours(0, 0, 0, 0);
   date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
-  const week1 = new Date(date.getFullYear(), 0, 4);
-  return 1 + Math.round(((date - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  const isoYear = date.getFullYear();
+  const week1 = new Date(isoYear, 0, 4);
+  const week = 1 + Math.round(((date - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  return { week, isoYear };
 };
 
 // _key é a identidade da linha para o React (nunca muda) — evita remontar a linha (e perder o
@@ -162,6 +170,19 @@ export default function Diario() {
   const [confirmDialog, setConfirmDialog] = useState(null); // "clear" | "example" | null
   const errorTimer = useRef(null);
   const lastGoodRef = useRef(new Map()); // id -> último estado confirmado pelo backend
+  const pendingSaveRef = useRef(new Map()); // _key -> Promise do save em andamento pra essa linha
+
+  // Espelha "results" de forma síncrona (sem esperar o próximo render) — precisamos disso dentro
+  // do syncResult, que depois de esperar um save anterior (await) precisa reler o estado mais
+  // atual da linha (com o id real já trocado) e um closure de useState não enxerga isso a tempo.
+  const resultsRef = useRef([]);
+  const setResultsSynced = (updater) => {
+    setResults((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      resultsRef.current = next;
+      return next;
+    });
+  };
 
   const showError = (message) => {
     setErrorMsg(message);
@@ -174,7 +195,7 @@ export default function Diario() {
       try {
         const res = await api.get("/daily-results");
         const normalized = res.data.map(normalizeRow);
-        setResults(normalized);
+        setResultsSynced(normalized);
         normalized.forEach((r) => lastGoodRef.current.set(r.id, r));
       } catch {
         showError("Falha ao carregar seus dados");
@@ -194,53 +215,79 @@ export default function Diario() {
     navigate("/login");
   };
 
+  // Identifica a linha por _key (estável) em vez de id (troca de temp-id pro id real do backend
+  // assim que o primeiro save volta). Antes disso, se o usuário preenchia "pontos" e já preenchia
+  // "financeiro" antes do POST do primeiro campo responder, os dois saves ainda viam a linha como
+  // temp-id e disparavam dois POSTs — criando uma linha duplicada (o total do mês inflava com uma
+  // linha fantasma que o usuário nem sabia que existia; a semana só "parecia" certa quando a
+  // duplicata caía num dia fora da janela dos últimos 7 dias).
   const syncResult = async (row) => {
     if (!isReadyRow(row)) return;
-    const payload = { data: row.data, pontos: Number(row.pontos), financeiro: row.financeiro === "" ? null : Number(row.financeiro) };
-    try {
-      const res = isTempId(row.id)
-        ? await api.post("/daily-results", payload)
-        : await api.put(`/daily-results/${row.id}`, payload);
-      // Só adota o id retornado pelo backend — preserva os valores atuais da linha (podem já ter
-      // sido editados de novo, ex: usuário passou para o campo financeiro enquanto isso salvava).
-      setResults((prev) => prev.map((r) => {
-        if (r.id !== row.id) return r;
-        const merged = { ...r, id: res.data.id };
-        lastGoodRef.current.set(res.data.id, merged);
-        return merged;
-      }));
-    } catch (err) {
-      showError(err?.response?.data?.message || "Falha ao salvar fechamento");
-      // reverte para o último estado confirmado pelo backend (ou remove, se nunca chegou a salvar)
-      const good = lastGoodRef.current.get(row.id);
-      if (good) {
-        setResults((prev) => prev.map((r) => (r.id === row.id ? good : r)));
-      } else if (isTempId(row.id)) {
-        setResults((prev) => prev.filter((r) => r.id !== row.id));
+    const key = row._key;
+
+    const prior = pendingSaveRef.current.get(key);
+    if (prior) await prior;
+
+    const current = resultsRef.current.find((r) => r._key === key) ?? row;
+    if (!isReadyRow(current)) return;
+
+    const payload = { data: current.data, pontos: Number(current.pontos), financeiro: current.financeiro === "" ? null : Number(current.financeiro) };
+    const request = (isTempId(current.id)
+      ? api.post("/daily-results", payload)
+      : api.put(`/daily-results/${current.id}`, payload)
+    ).then(
+      (res) => {
+        // Só adota o id retornado pelo backend — preserva os valores atuais da linha (podem já ter
+        // sido editados de novo, ex: usuário passou para o campo financeiro enquanto isso salvava).
+        setResultsSynced((prev) => prev.map((r) => {
+          if (r._key !== key) return r;
+          const merged = { ...r, id: res.data.id };
+          lastGoodRef.current.set(res.data.id, merged);
+          return merged;
+        }));
+      },
+      (err) => {
+        showError(err?.response?.data?.message || "Falha ao salvar fechamento");
+        // reverte para o último estado confirmado pelo backend (ou remove, se nunca chegou a salvar)
+        const good = lastGoodRef.current.get(current.id);
+        if (good) {
+          setResultsSynced((prev) => prev.map((r) => (r._key === key ? good : r)));
+        } else if (isTempId(current.id)) {
+          setResultsSynced((prev) => prev.filter((r) => r._key !== key));
+        }
       }
+    );
+
+    pendingSaveRef.current.set(key, request);
+    try {
+      await request;
+    } finally {
+      if (pendingSaveRef.current.get(key) === request) pendingSaveRef.current.delete(key);
     }
   };
 
-  const handleFieldChange = (id, field, value, syncNow) => {
-    const current = results.find((r) => r.id === id);
+  const handleFieldChange = (key, field, value, syncNow) => {
+    const current = results.find((r) => r._key === key);
+    if (!current) return;
     const merged = { ...current, [field]: value };
-    setResults((prev) => prev.map((r) => (r.id === id ? merged : r)));
+    setResultsSynced((prev) => prev.map((r) => (r._key === key ? merged : r)));
     if (syncNow) syncResult(merged);
   };
 
-  const handleFieldBlur = (id) => {
-    const current = results.find((r) => r.id === id);
+  const handleFieldBlur = (key) => {
+    const current = results.find((r) => r._key === key);
     if (current) syncResult(current);
   };
 
-  const addRow = () => setResults((prev) => [...prev, blankRow()]);
+  const addRow = () => setResultsSynced((prev) => [...prev, blankRow()]);
 
-  const removeRow = async (id) => {
-    setResults((prev) => prev.filter((r) => r.id !== id));
-    lastGoodRef.current.delete(id);
-    if (!isTempId(id)) {
+  const removeRow = async (key) => {
+    const row = results.find((r) => r._key === key);
+    setResultsSynced((prev) => prev.filter((r) => r._key !== key));
+    if (row) lastGoodRef.current.delete(row.id);
+    if (row && !isTempId(row.id)) {
       try {
-        await api.delete(`/daily-results/${id}`);
+        await api.delete(`/daily-results/${row.id}`);
       } catch {
         showError("Falha ao remover fechamento");
       }
@@ -251,7 +298,7 @@ export default function Diario() {
     try {
       const res = await api.post("/daily-results/seed");
       const normalized = res.data.map(normalizeRow);
-      setResults(normalized);
+      setResultsSynced(normalized);
       lastGoodRef.current = new Map(normalized.map((r) => [r.id, r]));
     } catch {
       showError("Falha ao carregar exemplo");
@@ -261,7 +308,7 @@ export default function Diario() {
   const clearAll = async () => {
     try {
       await api.delete("/daily-results");
-      setResults([]);
+      setResultsSynced([]);
       lastGoodRef.current = new Map();
     } catch {
       showError("Falha ao limpar fechamentos");
@@ -311,11 +358,17 @@ export default function Diario() {
   const assertividade = withAccum.length ? positiveDays.length / withAccum.length : 0;
   const somaGanhos = positiveDays.reduce((s, r) => s + r.financeiro, 0);
   const somaPerdas = Math.abs(negativeDays.reduce((s, r) => s + r.financeiro, 0));
-  const fatorLucro = somaPerdas > 0 ? somaGanhos / somaPerdas : somaGanhos > 0 ? somaGanhos : 0;
+  // Sem dias de perda, o fator de lucro não tem denominador — não faz sentido mostrar o ganho
+  // bruto em R$ como se fosse um múltiplo ("x"). Infinity sinaliza esse caso pra exibição tratar.
+  const fatorLucro = somaPerdas > 0 ? somaGanhos / somaPerdas : somaGanhos > 0 ? Infinity : 0;
 
   const latest = withAccum.length ? withAccum[withAccum.length - 1].dateObj : null;
   const sameDay = (a, b) => a && b && a.toDateString() === b.toDateString();
-  const sameWeek = (a, b) => a && b && weekNum(a) === weekNum(b) && a.getFullYear() === b.getFullYear();
+  const sameWeek = (a, b) => {
+    if (!a || !b) return false;
+    const wa = isoWeek(a), wb = isoWeek(b);
+    return wa.week === wb.week && wa.isoYear === wb.isoYear;
+  };
   const sameMonth = (a, b) => a && b && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
   const sameYear = (a, b) => a && b && a.getFullYear() === b.getFullYear();
 
@@ -339,8 +392,7 @@ export default function Diario() {
   const weeklyData = useMemo(() => {
     const map = new Map();
     withAccum.forEach((r) => {
-      const wk = weekNum(r.dateObj);
-      const year = r.dateObj.getFullYear();
+      const { week: wk, isoYear: year } = isoWeek(r.dateObj);
       const key = `${year}-${wk}`;
       if (!map.has(key)) map.set(key, { key, label: `S${wk}`, resultado: 0, order: year * 100 + wk });
       map.get(key).resultado += r.financeiro;
@@ -472,7 +524,7 @@ export default function Diario() {
           <Card label="Assertividade" value={`${(assertividade * 100).toFixed(1)}%`} icon={Percent} accent={C.roxoMed} />
           <Card label="Dias positivos" value={`${positiveDays.length}`} color={C.verde} icon={TrendingUp} accent={C.verde} />
           <Card label="Dias negativos" value={`${negativeDays.length}`} color={C.vermelho} icon={TrendingDown} accent={C.vermelho} />
-          <Card label="Fator de lucro" value={`${fatorLucro.toFixed(2)}x`} icon={Gauge} accent={C.roxoMed} />
+          <Card label="Fator de lucro" value={fatorLucro === Infinity ? "∞" : `${fatorLucro.toFixed(2)}x`} icon={Gauge} accent={C.roxoMed} />
           <Card label="Dias lançados" value={`${withAccum.length}`} icon={ListChecks} accent={C.roxoClaro} />
         </div>
 
@@ -574,7 +626,7 @@ export default function Diario() {
                     >
                       <td className="p-1.5">
                         <input
-                          type="date" value={r.data} onChange={(e) => handleFieldChange(r.id, "data", e.target.value, true)}
+                          type="date" value={r.data} onChange={(e) => handleFieldChange(r._key, "data", e.target.value, true)}
                           className="w-full text-xs p-1.5 rounded-md focus:border-[#8B5CF6] focus:ring-[2px] focus:ring-[#8B5CF633] outline-none"
                           style={{ background: "transparent", color: C.branco, colorScheme: "dark", border: "1px solid transparent" }}
                         />
@@ -582,7 +634,7 @@ export default function Diario() {
                       <td className="p-1.5">
                         <input
                           type="number" step="0.1" value={r.pontos}
-                          onChange={(e) => handleFieldChange(r.id, "pontos", e.target.value, false)} onBlur={() => handleFieldBlur(r.id)}
+                          onChange={(e) => handleFieldChange(r._key, "pontos", e.target.value, false)} onBlur={() => handleFieldBlur(r._key)}
                           className="w-24 text-xs p-1.5 rounded-md text-right tabular-nums focus:border-[#8B5CF6] focus:ring-[2px] focus:ring-[#8B5CF633] outline-none"
                           style={{ background: C.panel2, color: C.branco, border: `1px solid ${C.border}` }}
                         />
@@ -590,7 +642,7 @@ export default function Diario() {
                       <td className="p-1.5">
                         <input
                           type="number" step="0.01" value={r.financeiro}
-                          onChange={(e) => handleFieldChange(r.id, "financeiro", e.target.value, false)} onBlur={() => handleFieldBlur(r.id)}
+                          onChange={(e) => handleFieldChange(r._key, "financeiro", e.target.value, false)} onBlur={() => handleFieldBlur(r._key)}
                           className="w-24 text-xs p-1.5 rounded-md text-right tabular-nums font-bold focus:border-[#8B5CF6] focus:ring-[2px] focus:ring-[#8B5CF633] outline-none"
                           style={{ background: C.panel2, color: posColor, border: `1px solid ${C.border}` }}
                         />
@@ -606,7 +658,7 @@ export default function Diario() {
                       </td>
                       <td className="p-1.5 text-center">
                         <button
-                          onClick={() => removeRow(r.id)}
+                          onClick={() => removeRow(r._key)}
                           aria-label="Remover fechamento"
                           className="inline-flex items-center justify-center rounded-lg p-1.5 transition-all duration-150 hover:bg-[#F43F5E22]"
                           style={{ color: C.vermelho }}
