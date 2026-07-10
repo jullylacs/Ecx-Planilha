@@ -15,9 +15,15 @@ function normalizeOrigin(origin) {
 
 function getAllowedOrigins() {
   const raw = process.env.CORS_ALLOWED_ORIGINS || process.env.FRONTEND_URL || "http://localhost:5173";
-  return [...new Set(
-    raw.split(",").map((value) => normalizeOrigin(value)).filter(Boolean)
-  )];
+  const configured = raw.split(",").map((value) => normalizeOrigin(value)).filter(Boolean);
+
+  // Em produção o próprio backend serve o frontend (mesma origem): o navegador ainda manda o
+  // header Origin nas requisições, então o domínio público do Railway precisa estar na lista
+  // mesmo sem configurar CORS_ALLOWED_ORIGINS manualmente.
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  const selfOrigin = railwayDomain ? normalizeOrigin(`https://${railwayDomain}`) : null;
+
+  return [...new Set([...configured, selfOrigin].filter(Boolean))];
 }
 
 const allowedOrigins = getAllowedOrigins();
