@@ -5,27 +5,32 @@ const POINT_VALUE = 0.2;
 
 // Dados de exemplo usados pelo botão "Exemplo" do diário — fechamentos diários (mini índice)
 const SEED_DAILY_RESULTS = [
-  { data: "2026-05-04", pontos: 85 },
-  { data: "2026-05-06", pontos: -40 },
-  { data: "2026-05-11", pontos: 120 },
-  { data: "2026-05-13", pontos: 60 },
-  { data: "2026-05-20", pontos: -95 },
-  { data: "2026-06-01", pontos: 150 },
-  { data: "2026-06-03", pontos: -30 },
-  { data: "2026-06-10", pontos: 75 },
-  { data: "2026-06-17", pontos: -60 },
-  { data: "2026-06-24", pontos: 200 },
-  { data: "2026-07-01", pontos: -45 },
-  { data: "2026-07-06", pontos: 110 },
+  { data: "2026-05-04", pontos: 85, financeiro: 17 },
+  { data: "2026-05-06", pontos: -40, financeiro: -8 },
+  { data: "2026-05-11", pontos: 120, financeiro: 24 },
+  { data: "2026-05-13", pontos: 60, financeiro: 12 },
+  { data: "2026-05-20", pontos: -95, financeiro: -19 },
+  { data: "2026-06-01", pontos: 150, financeiro: 30 },
+  { data: "2026-06-03", pontos: -30, financeiro: -6 },
+  { data: "2026-06-10", pontos: 75, financeiro: 15 },
+  { data: "2026-06-17", pontos: -60, financeiro: -12 },
+  { data: "2026-06-24", pontos: 200, financeiro: 40 },
+  { data: "2026-07-01", pontos: -45, financeiro: -9 },
+  { data: "2026-07-06", pontos: 110, financeiro: 22 },
 ];
 
 const validateInput = (body) => {
-  const { data, pontos } = body || {};
+  const { data, pontos, financeiro } = body || {};
 
   if (!data) return "Data é obrigatória";
 
   const pontosNum = Number(pontos);
   if (!Number.isFinite(pontosNum)) return "Pontos inválidos";
+
+  if (financeiro !== undefined && financeiro !== null && financeiro !== "") {
+    const financeiroNum = Number(financeiro);
+    if (!Number.isFinite(financeiroNum)) return "Financeiro inválido";
+  }
 
   return null;
 };
@@ -33,6 +38,10 @@ const validateInput = (body) => {
 const buildPayload = (body, userId) => ({
   data: body.data,
   pontos: Number(body.pontos),
+  financeiro:
+    body.financeiro !== undefined && body.financeiro !== null && body.financeiro !== ""
+      ? Number(body.financeiro)
+      : null,
   user_id: userId,
 });
 

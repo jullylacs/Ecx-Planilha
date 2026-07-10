@@ -14,6 +14,11 @@ const DailyResult = sequelize.define("DailyResult", {
     allowNull: false
   },
 
+  financeiro: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true
+  },
+
   user_id: {
     type: DataTypes.INTEGER,
     allowNull: false,

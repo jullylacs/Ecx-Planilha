@@ -8,12 +8,11 @@ import {
   Plus, Trash2, RotateCcw, Activity, LogOut, Sparkles, Loader2,
   Target, Wallet, Calendar, CalendarDays, CalendarRange, Percent,
   TrendingUp, TrendingDown, Gauge, ListChecks, LineChart as LineChartIcon,
-  BarChart3, PieChart as PieChartIcon, CircleDollarSign,
+  BarChart3, PieChart as PieChartIcon, CircleDollarSign, AlertTriangle,
 } from "lucide-react";
 import api from "../services/api";
 import { C } from "../theme";
 
-const POINT_VALUE = 0.2; // R$ por ponto do mini índice (WIN)
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 const tempId = () => `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -41,18 +40,25 @@ const weekNum = (d) => {
   return 1 + Math.round(((date - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
 };
 
-const blankRow = () => ({ id: tempId(), data: "", pontos: "", financeiro: "" });
+// _key é a identidade da linha para o React (nunca muda) — evita remontar a linha (e perder o
+// foco de um campo em edição) quando o id local temporário é trocado pelo id real do backend.
+const blankRow = () => {
+  const key = tempId();
+  return { id: key, _key: key, data: "", pontos: "", financeiro: "" };
+};
 
 const isReadyRow = (r) => r && r.data && r.pontos !== "" && r.pontos !== null;
 
-const round2 = (n) => Math.round(n * 100) / 100;
+// Linha só entra nos cards/gráficos quando pontos E financeiro foram preenchidos manualmente.
+const isCompleteRow = (r) => isReadyRow(r) && r.financeiro !== "" && r.financeiro !== null && r.financeiro !== undefined;
 
-// Anexa o campo financeiro (client-only) calculado a partir de pontos — o backend só guarda pontos.
-const attachFinanceiro = (row) => {
-  const pNum = Number(row.pontos);
-  const financeiro = row.pontos !== "" && row.pontos !== null && Number.isFinite(pNum) ? String(round2(pNum * POINT_VALUE)) : "";
-  return { ...row, financeiro };
-};
+// Normaliza uma linha vinda do backend: financeiro (número ou null) vira string editável,
+// e recebe uma _key estável caso ainda não tenha uma.
+const normalizeRow = (row) => ({
+  ...row,
+  _key: row._key ?? String(row.id),
+  financeiro: row.financeiro === null || row.financeiro === undefined ? "" : String(row.financeiro),
+});
 
 function Card({ label, value, color = C.branco, icon: Icon, accent }) {
   const tint = accent || color;
@@ -70,6 +76,53 @@ function Card({ label, value, color = C.branco, icon: Icon, accent }) {
         <span style={{ color: C.roxoClaro, fontSize: 10.5 }} className="font-bold uppercase tracking-wider truncate">{label}</span>
       </div>
       <span style={{ color, fontFamily: "var(--font-display)" }} className="text-xl font-extrabold tabular-nums truncate">{value}</span>
+    </div>
+  );
+}
+
+function ConfirmDialog({ open, title, message, confirmLabel, tone = "danger", onConfirm, onCancel }) {
+  if (!open) return null;
+  const toneColor = tone === "danger" ? C.vermelho : C.roxoMed;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(10,10,15,0.72)", backdropFilter: "blur(2px)" }}
+      onClick={onCancel}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="fade-in w-full max-w-sm rounded-2xl p-5"
+        style={{ background: C.panel1, border: `1px solid ${C.border}`, boxShadow: "0 24px 60px -12px rgba(0,0,0,0.6)" }}
+      >
+        <div className="flex items-center gap-2.5 mb-2">
+          <span
+            className="flex items-center justify-center rounded-xl shrink-0"
+            style={{ width: 34, height: 34, background: `${toneColor}22`, color: toneColor }}
+          >
+            <AlertTriangle size={17} strokeWidth={2.3} />
+          </span>
+          <h3 style={{ color: C.branco }} className="text-sm font-bold tracking-wide">{title}</h3>
+        </div>
+        <p style={{ color: C.cinza }} className="text-xs leading-relaxed mb-5">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5"
+            style={{ background: C.panel2, color: C.branco, border: `1px solid ${C.border}` }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-lg px-3.5 py-2 text-xs font-bold transition-all duration-150 hover:-translate-y-0.5 hover:brightness-110"
+            style={{ background: toneColor, color: "#fff", boxShadow: `0 6px 18px -8px ${toneColor}` }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -106,6 +159,7 @@ export default function Diario() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState(null); // "clear" | "example" | null
   const errorTimer = useRef(null);
   const lastGoodRef = useRef(new Map()); // id -> último estado confirmado pelo backend
 
@@ -119,9 +173,9 @@ export default function Diario() {
     (async () => {
       try {
         const res = await api.get("/daily-results");
-        const withFinanceiro = res.data.map(attachFinanceiro);
-        setResults(withFinanceiro);
-        withFinanceiro.forEach((r) => lastGoodRef.current.set(r.id, r));
+        const normalized = res.data.map(normalizeRow);
+        setResults(normalized);
+        normalized.forEach((r) => lastGoodRef.current.set(r.id, r));
       } catch {
         showError("Falha ao carregar seus dados");
       } finally {
@@ -138,19 +192,19 @@ export default function Diario() {
 
   const syncResult = async (row) => {
     if (!isReadyRow(row)) return;
-    const payload = { data: row.data, pontos: Number(row.pontos) };
+    const payload = { data: row.data, pontos: Number(row.pontos), financeiro: row.financeiro === "" ? null : Number(row.financeiro) };
     try {
-      if (isTempId(row.id)) {
-        const res = await api.post("/daily-results", payload);
-        const saved = attachFinanceiro(res.data);
-        lastGoodRef.current.set(saved.id, saved);
-        setResults((prev) => prev.map((r) => (r.id === row.id ? saved : r)));
-      } else {
-        const res = await api.put(`/daily-results/${row.id}`, payload);
-        const saved = attachFinanceiro(res.data);
-        lastGoodRef.current.set(row.id, saved);
-        setResults((prev) => prev.map((r) => (r.id === row.id ? saved : r)));
-      }
+      const res = isTempId(row.id)
+        ? await api.post("/daily-results", payload)
+        : await api.put(`/daily-results/${row.id}`, payload);
+      // Só adota o id retornado pelo backend — preserva os valores atuais da linha (podem já ter
+      // sido editados de novo, ex: usuário passou para o campo financeiro enquanto isso salvava).
+      setResults((prev) => prev.map((r) => {
+        if (r.id !== row.id) return r;
+        const merged = { ...r, id: res.data.id };
+        lastGoodRef.current.set(res.data.id, merged);
+        return merged;
+      }));
     } catch (err) {
       showError(err?.response?.data?.message || "Falha ao salvar fechamento");
       // reverte para o último estado confirmado pelo backend (ou remove, se nunca chegou a salvar)
@@ -165,18 +219,7 @@ export default function Diario() {
 
   const handleFieldChange = (id, field, value, syncNow) => {
     const current = results.find((r) => r.id === id);
-    let merged;
-    if (field === "pontos") {
-      const pNum = Number(value);
-      const financeiro = value !== "" && Number.isFinite(pNum) ? String(round2(pNum * POINT_VALUE)) : "";
-      merged = { ...current, pontos: value, financeiro };
-    } else if (field === "financeiro") {
-      const fNum = Number(value);
-      const pontos = value !== "" && Number.isFinite(fNum) ? String(round2(fNum / POINT_VALUE)) : "";
-      merged = { ...current, financeiro: value, pontos };
-    } else {
-      merged = { ...current, [field]: value };
-    }
+    const merged = { ...current, [field]: value };
     setResults((prev) => prev.map((r) => (r.id === id ? merged : r)));
     if (syncNow) syncResult(merged);
   };
@@ -203,9 +246,9 @@ export default function Diario() {
   const resetExample = async () => {
     try {
       const res = await api.post("/daily-results/seed");
-      const withFinanceiro = res.data.map(attachFinanceiro);
-      setResults(withFinanceiro);
-      lastGoodRef.current = new Map(withFinanceiro.map((r) => [r.id, r]));
+      const normalized = res.data.map(normalizeRow);
+      setResults(normalized);
+      lastGoodRef.current = new Map(normalized.map((r) => [r.id, r]));
     } catch {
       showError("Falha ao carregar exemplo");
     }
@@ -223,12 +266,12 @@ export default function Diario() {
 
   const calcById = useMemo(() => {
     const map = new Map();
-    const ready = results.filter((r) => isReadyRow(r));
+    const ready = results.filter((r) => isCompleteRow(r));
     ready.sort((a, b) => a.data.localeCompare(b.data));
     let running = 0;
     ready.forEach((r) => {
       const pontos = parseFloat(r.pontos);
-      const financeiro = pontos * POINT_VALUE;
+      const financeiro = parseFloat(r.financeiro);
       running += financeiro;
       map.set(r.id, { pontos, financeiro, acumulado: running, dateObj: new Date(r.data + "T00:00:00") });
     });
@@ -359,14 +402,14 @@ export default function Diario() {
           </span>
           <div className="ml-auto flex gap-2">
             <button
-              onClick={resetExample}
+              onClick={() => setConfirmDialog("example")}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 hover:border-[#8B5CF6] hover:text-[#C4B5FD]"
               style={{ background: C.panel2, color: C.branco, border: `1px solid ${C.border}` }}
             >
               <RotateCcw size={13} /> Exemplo
             </button>
             <button
-              onClick={clearAll}
+              onClick={() => setConfirmDialog("clear")}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#F43F5E1a] hover:border-[#F43F5E]"
               style={{ background: C.panel2, color: C.vermelho, border: `1px solid ${C.border}` }}
             >
@@ -502,7 +545,7 @@ export default function Diario() {
                   const posColor = c ? (c.financeiro >= 0 ? C.verde : C.vermelho) : C.cinza;
                   return (
                     <tr
-                      key={r.id}
+                      key={r._key}
                       className={i % 2 === 0 ? "bg-[#1B1B24] hover:bg-[#8B5CF614]" : "bg-[#24242F] hover:bg-[#8B5CF614]"}
                       style={{ borderBottom: `1px solid ${C.border}`, transition: "background-color 0.12s ease" }}
                     >
@@ -566,6 +609,31 @@ export default function Diario() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDialog === "clear"}
+        title="Limpar todos os fechamentos?"
+        message="Tem certeza? Todos os dados serão excluídos permanentemente."
+        confirmLabel="Limpar tudo"
+        tone="danger"
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={() => {
+          setConfirmDialog(null);
+          clearAll();
+        }}
+      />
+      <ConfirmDialog
+        open={confirmDialog === "example"}
+        title="Carregar dados de exemplo?"
+        message="Isso vai substituir todos os seus fechamentos atuais pelos dados de exemplo, de forma permanente."
+        confirmLabel="Carregar exemplo"
+        tone="warning"
+        onCancel={() => setConfirmDialog(null)}
+        onConfirm={() => {
+          setConfirmDialog(null);
+          resetExample();
+        }}
+      />
     </div>
   );
 }
