@@ -57,6 +57,11 @@ const blankRow = () => {
 
 const isReadyRow = (r) => r && r.data && r.pontos !== "" && r.pontos !== null;
 
+// Seleciona todo o conteúdo ao focar um campo numérico — sem isso, clicar num campo já
+// preenchido (ex: "0") e digitar insere o novo dígito do lado do valor antigo em vez de
+// substituí-lo (ex: "0" vira "05" ao digitar "5").
+const selectOnFocus = (e) => e.target.select();
+
 // Linha só entra nos cards/gráficos quando pontos E financeiro foram preenchidos manualmente.
 const isCompleteRow = (r) => isReadyRow(r) && r.financeiro !== "" && r.financeiro !== null && r.financeiro !== undefined;
 
@@ -165,7 +170,7 @@ export default function Diario() {
   })();
 
   const [results, setResults] = useState([]);
-  const [capitalInicial, setCapitalInicial] = useState(0);
+  const [capitalInicial, setCapitalInicial] = useState(""); // string editável — vazio = 0, evita o "0" grudado ao digitar
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(null); // "clear" | "example" | null
@@ -196,7 +201,8 @@ export default function Diario() {
     (async () => {
       try {
         const [meRes, resultsRes] = await Promise.all([api.get("/users/me"), api.get("/daily-results")]);
-        setCapitalInicial(Number(meRes.data.capital_inicial) || 0);
+        const capitalNum = Number(meRes.data.capital_inicial) || 0;
+        setCapitalInicial(capitalNum > 0 ? String(capitalNum) : "");
         const normalized = resultsRes.data.map(normalizeRow);
         setResultsSynced(normalized);
         normalized.forEach((r) => lastGoodRef.current.set(r.id, r));
@@ -219,10 +225,10 @@ export default function Diario() {
   };
 
   const handleCapitalChange = (value) => {
-    const parsed = Math.max(0, parseFloat(value) || 0);
-    setCapitalInicial(parsed);
+    setCapitalInicial(value); // guarda o texto cru — permite ficar vazio enquanto o usuário digita
     clearTimeout(capitalTimer.current);
     capitalTimer.current = setTimeout(async () => {
+      const parsed = Math.max(0, parseFloat(value) || 0);
       try {
         await api.put("/users/me", { capital_inicial: parsed });
       } catch {
@@ -369,7 +375,8 @@ export default function Diario() {
   );
 
   const total = withAccum.reduce((s, r) => s + r.financeiro, 0);
-  const capitalAtual = capitalInicial + total;
+  const capitalInicialNum = Number(capitalInicial) || 0;
+  const capitalAtual = capitalInicialNum + total;
   const positiveDays = withAccum.filter((r) => r.financeiro > 0);
   const negativeDays = withAccum.filter((r) => r.financeiro < 0);
   const assertividade = withAccum.length ? positiveDays.length / withAccum.length : 0;
@@ -521,7 +528,7 @@ export default function Diario() {
           <div style={{ color: C.roxoClaro, fontSize: 11 }} className="relative font-bold tracking-[0.2em] uppercase mb-2">
             Capital atual
           </div>
-          <div style={{ color: capitalAtual >= capitalInicial ? "#fff" : "#FCA5B1", fontFamily: "var(--font-display)" }} className="relative text-4xl md:text-5xl font-extrabold tracking-tight">
+          <div style={{ color: capitalAtual >= capitalInicialNum ? "#fff" : "#FCA5B1", fontFamily: "var(--font-display)" }} className="relative text-4xl md:text-5xl font-extrabold tracking-tight">
             {fmt(capitalAtual)}
           </div>
           <div className="relative flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 mt-3 text-xs" style={{ color: "rgba(255,255,255,0.78)" }}>
@@ -530,8 +537,9 @@ export default function Diario() {
               <span className="inline-flex items-center rounded-md" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)" }}>
                 <span className="pl-2 text-[11px]" style={{ color: "rgba(255,255,255,0.65)" }}>R$</span>
                 <input
-                  type="number" step="0.01" min="0" value={capitalInicial}
+                  type="number" step="0.01" min="0" value={capitalInicial} placeholder="0"
                   onChange={(e) => handleCapitalChange(e.target.value)}
+                  onFocus={selectOnFocus}
                   className="w-24 text-center px-1.5 py-1 bg-transparent outline-none font-bold"
                   style={{ color: "#fff" }}
                 />
@@ -565,7 +573,7 @@ export default function Diario() {
 
         <div className="mt-4">
           <ChartPanel title="Curva de capital — capital inicial + resultado acumulado" icon={LineChartIcon} empty={!hasData} emptyLabel="Adicione um fechamento para ver a curva">
-            <AreaChart data={withAccum.map((r) => ({ ...r, capitalAcumulado: capitalInicial + r.acumulado }))}>
+            <AreaChart data={withAccum.map((r) => ({ ...r, capitalAcumulado: capitalInicialNum + r.acumulado }))}>
               <defs>
                 <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={C.roxoMed} stopOpacity={0.55} />
@@ -670,6 +678,7 @@ export default function Diario() {
                         <input
                           type="number" step="0.1" value={r.pontos}
                           onChange={(e) => handleFieldChange(r._key, "pontos", e.target.value, false)} onBlur={() => handleFieldBlur(r._key)}
+                          onFocus={selectOnFocus}
                           className="w-24 text-xs p-1.5 rounded-md text-right tabular-nums focus:border-[#8B5CF6] focus:ring-[2px] focus:ring-[#8B5CF633] outline-none"
                           style={{ background: C.panel2, color: C.branco, border: `1px solid ${C.border}` }}
                         />
@@ -678,6 +687,7 @@ export default function Diario() {
                         <input
                           type="number" step="0.01" value={r.financeiro}
                           onChange={(e) => handleFieldChange(r._key, "financeiro", e.target.value, false)} onBlur={() => handleFieldBlur(r._key)}
+                          onFocus={selectOnFocus}
                           className="w-24 text-xs p-1.5 rounded-md text-right tabular-nums font-bold focus:border-[#8B5CF6] focus:ring-[2px] focus:ring-[#8B5CF633] outline-none"
                           style={{ background: C.panel2, color: posColor, border: `1px solid ${C.border}` }}
                         />
