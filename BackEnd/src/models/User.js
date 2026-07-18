@@ -30,6 +30,13 @@ const User = sequelize.define("User", {
   resetPasswordExpires: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+
+  // Capital com que o usuário iniciou a jornada — soma ao resultado acumulado para formar o capital atual
+  capital_inicial: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0
   }
 
 }, {

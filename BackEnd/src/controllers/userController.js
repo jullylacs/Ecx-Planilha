@@ -142,13 +142,21 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// 🔹 Atualiza dados do próprio perfil (nome)
+// 🔹 Atualiza dados do próprio perfil (nome e/ou capital inicial)
 exports.updateMe = async (req, res) => {
   try {
-    const { nome } = req.body;
+    const { nome, capital_inicial } = req.body;
     const updateData = {};
 
     if (nome !== undefined) updateData.nome = xss(nome);
+
+    if (capital_inicial !== undefined) {
+      const parsed = Number(capital_inicial);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return res.status(400).json({ message: "Capital inicial inválido" });
+      }
+      updateData.capital_inicial = parsed;
+    }
 
     await User.update(updateData, { where: { id: req.userId } });
 

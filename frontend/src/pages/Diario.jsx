@@ -8,7 +8,7 @@ import {
   Plus, Trash2, RotateCcw, Activity, LogOut, Sparkles, Loader2,
   Target, Wallet, Calendar, CalendarDays, CalendarRange, Percent,
   TrendingUp, TrendingDown, Gauge, ListChecks, LineChart as LineChartIcon,
-  BarChart3, PieChart as PieChartIcon, CircleDollarSign, AlertTriangle, Layers,
+  BarChart3, PieChart as PieChartIcon, CircleDollarSign, AlertTriangle, Layers, PiggyBank,
 } from "lucide-react";
 import api from "../services/api";
 import { C } from "../theme";
@@ -165,10 +165,12 @@ export default function Diario() {
   })();
 
   const [results, setResults] = useState([]);
+  const [capitalInicial, setCapitalInicial] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(null); // "clear" | "example" | null
   const errorTimer = useRef(null);
+  const capitalTimer = useRef(null);
   const lastGoodRef = useRef(new Map()); // id -> último estado confirmado pelo backend
   const pendingSaveRef = useRef(new Map()); // _key -> Promise do save em andamento pra essa linha
 
@@ -193,8 +195,9 @@ export default function Diario() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get("/daily-results");
-        const normalized = res.data.map(normalizeRow);
+        const [meRes, resultsRes] = await Promise.all([api.get("/users/me"), api.get("/daily-results")]);
+        setCapitalInicial(Number(meRes.data.capital_inicial) || 0);
+        const normalized = resultsRes.data.map(normalizeRow);
         setResultsSynced(normalized);
         normalized.forEach((r) => lastGoodRef.current.set(r.id, r));
       } catch {
@@ -213,6 +216,19 @@ export default function Diario() {
     }
     localStorage.removeItem("user");
     navigate("/login");
+  };
+
+  const handleCapitalChange = (value) => {
+    const parsed = Math.max(0, parseFloat(value) || 0);
+    setCapitalInicial(parsed);
+    clearTimeout(capitalTimer.current);
+    capitalTimer.current = setTimeout(async () => {
+      try {
+        await api.put("/users/me", { capital_inicial: parsed });
+      } catch {
+        showError("Falha ao salvar capital inicial");
+      }
+    }, 500);
   };
 
   // Identifica a linha por _key (estável) em vez de id (troca de temp-id pro id real do backend
@@ -353,6 +369,7 @@ export default function Diario() {
   );
 
   const total = withAccum.reduce((s, r) => s + r.financeiro, 0);
+  const capitalAtual = capitalInicial + total;
   const positiveDays = withAccum.filter((r) => r.financeiro > 0);
   const negativeDays = withAccum.filter((r) => r.financeiro < 0);
   const assertividade = withAccum.length ? positiveDays.length / withAccum.length : 0;
@@ -502,13 +519,31 @@ export default function Diario() {
         >
           <TrendingUp size={160} strokeWidth={1} style={{ position: "absolute", right: -24, top: -30, opacity: 0.12, color: "#fff" }} />
           <div style={{ color: C.roxoClaro, fontSize: 11 }} className="relative font-bold tracking-[0.2em] uppercase mb-2">
-            Resultado total acumulado
+            Capital atual
           </div>
-          <div style={{ color: total >= 0 ? "#fff" : "#FCA5B1", fontFamily: "var(--font-display)" }} className="relative text-4xl md:text-5xl font-extrabold tracking-tight">
-            {fmt(total)}
+          <div style={{ color: capitalAtual >= capitalInicial ? "#fff" : "#FCA5B1", fontFamily: "var(--font-display)" }} className="relative text-4xl md:text-5xl font-extrabold tracking-tight">
+            {fmt(capitalAtual)}
+          </div>
+          <div className="relative flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 mt-3 text-xs" style={{ color: "rgba(255,255,255,0.78)" }}>
+            <span className="inline-flex items-center gap-1.5">
+              <PiggyBank size={13} /> Capital inicial:
+              <span className="inline-flex items-center rounded-md" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)" }}>
+                <span className="pl-2 text-[11px]" style={{ color: "rgba(255,255,255,0.65)" }}>R$</span>
+                <input
+                  type="number" step="0.01" min="0" value={capitalInicial}
+                  onChange={(e) => handleCapitalChange(e.target.value)}
+                  className="w-24 text-center px-1.5 py-1 bg-transparent outline-none font-bold"
+                  style={{ color: "#fff" }}
+                />
+              </span>
+            </span>
+            <span>
+              Resultado acumulado:{" "}
+              <b style={{ color: total >= 0 ? "#BBF7D0" : "#FCA5B1" }}>{fmt(total)}</b>
+            </span>
           </div>
           {hasData && (
-            <div style={{ color: "rgba(255,255,255,0.62)" }} className="relative text-xs mt-2.5">
+            <div style={{ color: "rgba(255,255,255,0.55)" }} className="relative text-xs mt-2.5">
               {fmtDate(withAccum[0].data)} — {fmtDate(withAccum[withAccum.length - 1].data)} · {withAccum.length} dia{withAccum.length !== 1 ? "s" : ""} lançados
             </div>
           )}
@@ -529,8 +564,8 @@ export default function Diario() {
         </div>
 
         <div className="mt-4">
-          <ChartPanel title="Curva de capital — resultado acumulado" icon={LineChartIcon} empty={!hasData} emptyLabel="Adicione um fechamento para ver a curva">
-            <AreaChart data={withAccum}>
+          <ChartPanel title="Curva de capital — capital inicial + resultado acumulado" icon={LineChartIcon} empty={!hasData} emptyLabel="Adicione um fechamento para ver a curva">
+            <AreaChart data={withAccum.map((r) => ({ ...r, capitalAcumulado: capitalInicial + r.acumulado }))}>
               <defs>
                 <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={C.roxoMed} stopOpacity={0.55} />
@@ -539,9 +574,9 @@ export default function Diario() {
               </defs>
               <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="data" tick={tickStyle} tickFormatter={fmtDate} />
-              <YAxis tick={tickStyle} width={64} tickFormatter={(v) => `R$${v}`} />
+              <YAxis tick={tickStyle} width={64} tickFormatter={(v) => `R$${v}`} domain={["auto", "auto"]} />
               <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: C.branco }} formatter={(v) => fmt(v)} labelFormatter={fmtDate} />
-              <Area type="monotone" dataKey="acumulado" stroke={C.roxoMed} strokeWidth={2.5} fill="url(#eq)" />
+              <Area type="monotone" dataKey="capitalAcumulado" name="Capital" stroke={C.roxoMed} strokeWidth={2.5} fill="url(#eq)" />
             </AreaChart>
           </ChartPanel>
         </div>

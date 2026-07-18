@@ -52,6 +52,8 @@ roxo e branco definida no protótipo original do projeto.
   automático (cria/atualiza/remove no banco conforme você edita, sem botão de "salvar") — permite
   mais de um lançamento na mesma data
 - 🧮 Resultado financeiro calculado automaticamente a partir dos pontos (mini índice, R$0,20/pt)
+- 🐷 Capital inicial configurável, somado ao resultado acumulado para exibir o capital atual
+  (inclusive na curva de capital)
 - 🔄 Botão **Exemplo** — popula o diário com 12 fechamentos de demonstração
 - 🗑️ Botão **Limpar** — remove todos os seus fechamentos de uma vez
 - 📊 5 gráficos (Recharts): curva de capital, semanal, mensal, pizza de dias positivos x
@@ -175,7 +177,7 @@ API, um header `Authorization: Bearer <token>`).
 | POST | `/users/forgot-password` | Envia (por e-mail) um link de redefinição de senha, se o e-mail existir — sempre responde com a mesma mensagem genérica |
 | POST | `/users/reset-password` | Troca a senha usando o token recebido por e-mail (válido por 1h, uso único) |
 | GET | `/users/me` | Perfil do usuário autenticado |
-| PUT | `/users/me` | Atualiza o nome do usuário |
+| PUT | `/users/me` | Atualiza o nome e/ou o capital inicial do usuário |
 | GET | `/daily-results` | Lista os fechamentos diários do usuário |
 | POST | `/daily-results` | Cria um fechamento diário (permite mais de um por data) |
 | PUT | `/daily-results/:id` | Atualiza um fechamento |
